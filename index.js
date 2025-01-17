@@ -1,5 +1,4 @@
 import {ZBClient} from 'zeebe-node'
-import {v4 as uuid} from 'uuid'
 import {config} from 'dotenv'
 import axios from 'axios'
 
@@ -11,55 +10,170 @@ const zbc = new ZBClient()
 zbc.createWorker({
   taskType: "bonitaetspruefung",
   taskHandler: (job) => {
-    console.log("Invoke REST call...");
+    console.log("Bonitaetspruefung gestartet...");
     axios
       .get(url)
       .then((response) => {
-        console.log("...finished. Complete Job...");
-        const creditScore = response.data.creditScore;
+        console.log("Bonitaetspruefung fertig.");
+        const bonitaet = response.data.bonitaet;
         let result = false;
-        if (creditScore >= 700) {
+        if (bonitaet >= 700) {
           result = true;
         }
         job.complete({ result: result }).then(() => {
         });
       })
       .catch((error) => {
-        job.fail("Could not invoke REST API: " + error.message);
+        job.fail("Error: " + error.message);
       });
   },
 });
 
-zbc.createWorker('risikobewertung', async (job) => {
-  const { fahrzeugdaten, unfallhistorie } = job.variables;
-
-  try {
-    const response = await axios.post('http://localhost:3002/fahrzeuge', {
-      fahrzeugdaten,
-      unfallhistorie,
-    });
-    const risikoErgebnis = response.data;
-
-    return job.complete({ risikoErgebnis });
-  } catch (error) {
-    return job.fail('Fehler bei der Risikobewertung.' + error);
-  }
+zbc.createWorker({
+  taskType: "risikopruefung",
+  taskHandler: (job) => {
+    console.log("Risikopruefung gestartet...");
+    axios
+      .get(url)
+      .then((response) => {
+        console.log("Risikopruefung fertig.");
+        const risiko = response.data.risiko;
+        let result = false;
+        if (risiko >= 700) {
+          result = true;
+        }
+        job.complete({ result: result }).then(() => {
+        });
+      })
+      .catch((error) => {
+        job.fail("Error: " + error.message);
+      });
+  },
 });
 
-zbc.createWorker('bonitaetspruefung', async (job) => {
-  const { kundeId } = job.variables;
+zbc.createWorker({
+    taskType: 'antragStellen',
+    taskHandler: async (job) => {
 
-  try {
-    const response = await axios.get(`http://localhost:3001/kunden/${kundeId}`);
-    const bonitaetErgebnis = response.data.creditScore;
-    let result = false;
-    if (creditScore >= 700) {
-    result = true;
-    }
+        console.log('Antrag versendet');
 
-    return job.complete({ bonitaetErgebnis });
-  } catch (error) {
-    return job.fail('Fehler bei der Bonitätsprüfung.' + error);
-  }
+        try {
+          await zbc.publishMessage({
+            name: 'antragStellen',
+            variables: { initialProcessVariable: 'Application received' }
+          });
+        
+        } catch (err) {
+          console.error('Error:', err);
+        }
+      
+        await job.complete();
+    },
 });
 
+zbc.createWorker({
+  taskType: 'kundeKontaktieren',
+  taskHandler: async (job) => {
+
+      console.log('Kunde kontaktiert');
+
+      try {
+        await zbc.publishMessage({
+          correlationKey: 'nachfragenDaten',
+          name: 'kundeKontaktieren',
+          variables: { initialProcessVariable: 'Application received' }
+        });
+        
+      } catch (err) {
+        console.error('Error:', err);
+      }
+    
+      await job.complete();
+  },
+});
+
+zbc.createWorker({
+  taskType: 'fehlendeDaten',
+  taskHandler: async (job) => {
+
+      console.log('fehlende Daten');
+
+      try {
+        await zbc.publishMessage({
+          correlationKey: 'antragId',
+          name: 'fehlendeDaten',
+          variables: { initialProcessVariable: 'Application received' }
+        });
+        
+      } catch (err) {
+        console.error('Error:', err);
+      }
+    
+      await job.complete();
+  },
+});
+
+zbc.createWorker({
+  taskType: 'abbruch',
+  taskHandler: async (job) => {
+
+      console.log('Abgebrochen');
+
+      try {
+        await zbc.publishMessage({
+          correlationKey: 'abbruch',
+          name: 'abbruch',
+          variables: { initialProcessVariable: 'Application received' }
+        });
+        
+        console.log('Message sent to the Verification pool.');
+      } catch (err) {
+        console.error('Error:', err);
+      }
+    
+      await job.complete();
+  },
+});
+
+zbc.createWorker({
+  taskType: 'absage',
+  taskHandler: async (job) => {
+
+      console.log('Abgesagt');
+
+      try {
+        await zbc.publishMessage({
+          correlationKey: 'absage',
+          name: 'absage',
+          variables: { initialProcessVariable: 'Application received' }
+        });
+        
+        console.log('Message sent to the Verification pool.');
+      } catch (err) {
+        console.error('Error:', err);
+      }
+    
+      await job.complete();
+  },
+});
+
+zbc.createWorker({
+  taskType: 'zusage',
+  taskHandler: async (job) => {
+
+      console.log('Zugesagt');
+
+      try {
+        await zbc.publishMessage({
+          correlationKey: 'zusage',
+          name: 'zusage',
+          variables: { initialProcessVariable: 'Application received' }
+        });
+        
+      } catch (err) {
+        console.error('Error:', err);
+      }
+    
+      await job.complete();
+  },
+});
