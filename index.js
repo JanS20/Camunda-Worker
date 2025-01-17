@@ -33,21 +33,41 @@ zbc.createWorker({
   taskType: "risikopruefung",
   taskHandler: (job) => {
     console.log("Risikopruefung gestartet...");
-    axios
-      .get(url)
-      .then((response) => {
-        console.log("Risikopruefung fertig.");
-        const risiko = response.data.risiko;
-        let result = false;
-        if (risiko >= 700) {
-          result = true;
-        }
-        job.complete({ result: result }).then(() => {
-        });
-      })
-      .catch((error) => {
-        job.fail("Error: " + error.message);
+
+    const { fahrzeugdaten, unfallhistorie } = job.variables;
+
+    if (!fahrzeugdaten || !unfallhistorie) {
+      console.error('Fehlende Fahrzeugdaten oder Unfallhistorie!');
+      job.fail('Fahrzeugdaten oder Unfallhistorie fehlen.');
+      return;
+    }
+
+    try {
+      const response = axios.get(RISK_CHECK_URL, {
+        params: { fahrzeugdaten, unfallhistorie },
       });
+
+      console.log('Risikoprüfung abgeschlossen.');
+
+      const risiko = response.data.risiko;
+
+      let risikoKategorie = 'low';
+      if (risiko >= 700) {
+        risikoKategorie = 'high';
+      } else if (risiko >= 400) {
+        risikoKategorie = 'medium';
+      }
+
+      console.log(`Ergebnis der Risikoprüfung: ${risikoKategorie}`);
+
+      job.complete({
+        risikoKategorie,
+      });
+
+    } catch (error) {
+      console.error('Fehler bei der Risikoprüfung:', error.message);
+      job.fail('Fehler bei der Risikoprüfung: ' + error.message);
+    }
   },
 });
 
